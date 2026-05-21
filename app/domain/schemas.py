@@ -84,6 +84,8 @@ EventPayload = Union[
     ExternalDriftResolved,
     RollbackInitiated,
     GuardrailObservationRecorded,
+    GuardrailThresholdBreached,
+    CompensationStrategySelected,
 ]
 
 
@@ -121,6 +123,13 @@ class ResourceAllocationCommandPayload(DomainBaseModel):
     target_cpu_cores: float = Field(ge=0.1, le=128.0)
     target_memory_gb: float = Field(ge=0.5, le=1024.0)
     reason_code: str = Field(min_length=1, max_length=50)
+
+    @field_validator("target_cpu_cores", "target_memory_gb")
+    @classmethod
+    def check_command_finite(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("Value must be a finite number")
+        return v
 
 
 class CommandEnvelope(DomainBaseModel):

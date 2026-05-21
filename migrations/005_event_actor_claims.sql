@@ -1,0 +1,2 @@
+ALTER TABLE events
+ADD COLUMN IF NOT EXISTS actor_claims JSONB NOT NULL DEFAULT '[]'::jsonb;

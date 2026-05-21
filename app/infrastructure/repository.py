@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 import asyncpg
 from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 
-from app.domain.schemas import EventEnvelope
+from app.domain.schemas import EventEnvelope, ResourceNodeSnapshot
 from app.security.hash_chain import generate_event_hash, verify_chain
 
 
@@ -29,7 +29,7 @@ class EventRepository:
 
     async def _get_latest_hash(
         self, conn: asyncpg.Connection, tenant_id: UUID, aggregate_id: UUID
-    ) -> str:
+    ) -> Optional[str]:
         query = """
             SELECT event_hash
             FROM events
@@ -37,17 +37,16 @@ class EventRepository:
             ORDER BY sequence_id DESC
             LIMIT 1
         """
-        result = await conn.fetchval(query, tenant_id, aggregate_id)
-        return result or "genesis_hash"
+        return await conn.fetchval(query, tenant_id, aggregate_id)
 
     async def append_event_and_enqueue(self, envelope: EventEnvelope) -> None:
         append_query = """
             INSERT INTO events (
                 event_id, tenant_id, aggregate_id, sequence_id,
                 timestamp_utc_ms, idempotency_key, actor_id,
-                expected_version, event_type, payload,
+                actor_claims, expected_version, event_type, payload,
                 previous_hash, event_hash
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $13)
         """
 
         outbox_query = """
@@ -79,6 +78,7 @@ class EventRepository:
                         envelope.timestamp_utc_ms,
                         envelope.idempotency_key,
                         envelope.actor_id,
+                        envelope.actor_claims,
                         envelope.expected_version,
                         envelope.payload.event_type,
                         payload_dict,
@@ -105,7 +105,7 @@ class EventRepository:
     ) -> List[EventEnvelope]:
         query = """
             SELECT event_id, tenant_id, aggregate_id, sequence_id,
-                   timestamp_utc_ms, idempotency_key, actor_id,
+                   timestamp_utc_ms, idempotency_key, actor_id, actor_claims,
                    expected_version, payload, previous_hash, event_hash
             FROM events
             WHERE tenant_id = $1 AND aggregate_id = $2 AND sequence_id > $3
@@ -125,6 +125,74 @@ class EventRepository:
             )
 
         return [self._map_record_to_envelope(record) for record in records]
+
+    async def get_event_by_id(
+        self, conn: asyncpg.Connection, event_id: UUID, tenant_id: UUID
+    ) -> Optional[EventEnvelope]:
+        query = """
+            SELECT event_id, tenant_id, aggregate_id, sequence_id,
+                   timestamp_utc_ms, idempotency_key, actor_id, actor_claims,
+                   expected_version, payload, previous_hash, event_hash
+            FROM events
+            WHERE event_id = $1 AND tenant_id = $2
+            LIMIT 1
+        """
+        record = await conn.fetchrow(query, event_id, tenant_id)
+        if record is None:
+            return None
+
+        verify_chain(
+            previous_hash=record["previous_hash"],
+            current_hash=record["event_hash"],
+            payload=record["payload"],
+            timestamp_ms=record["timestamp_utc_ms"],
+            sequence_id=record["sequence_id"],
+        )
+
+        return self._map_record_to_envelope(record)
+
+    async def get_node_projection(
+        self, conn: asyncpg.Connection, tenant_id: UUID, node_id: UUID
+    ) -> Optional[ResourceNodeSnapshot]:
+        query = """
+            SELECT node_id, lifecycle_state, cpu_cores, memory_gb, last_sequence_id, schema_version
+            FROM read_model_nodes
+            WHERE tenant_id = $1 AND node_id = $2
+        """
+        record = await conn.fetchrow(query, tenant_id, node_id)
+        if record is None:
+            return None
+        return ResourceNodeSnapshot.model_validate(dict(record))
+
+    async def upsert_node_projection(
+        self,
+        conn: asyncpg.Connection,
+        tenant_id: UUID,
+        snapshot: ResourceNodeSnapshot,
+    ) -> None:
+        query = """
+            INSERT INTO read_model_nodes (
+                tenant_id, node_id, lifecycle_state, cpu_cores, memory_gb, last_sequence_id, schema_version, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            ON CONFLICT (tenant_id, node_id) DO UPDATE
+            SET lifecycle_state = EXCLUDED.lifecycle_state,
+                cpu_cores = EXCLUDED.cpu_cores,
+                memory_gb = EXCLUDED.memory_gb,
+                last_sequence_id = EXCLUDED.last_sequence_id,
+                schema_version = EXCLUDED.schema_version,
+                updated_at = NOW()
+            WHERE read_model_nodes.last_sequence_id < EXCLUDED.last_sequence_id
+        """
+        await conn.execute(
+            query,
+            tenant_id,
+            snapshot.node_id,
+            snapshot.lifecycle_state,
+            snapshot.cpu_cores,
+            snapshot.memory_gb,
+            snapshot.last_sequence_id,
+            snapshot.schema_version,
+        )
 
     def _map_record_to_envelope(self, record: asyncpg.Record) -> EventEnvelope:
         try:

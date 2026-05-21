@@ -1,17 +1,48 @@
 import asyncio
+import json
 from uuid import uuid4
 
 import asyncpg
 import pytest
 
+from app.security.hash_chain import generate_event_hash
+
 
 @pytest.mark.asyncio
-async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool):
+async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool, reset_db):
+    _ = reset_db
     tenant_id = uuid4()
     event_ids = [uuid4() for _ in range(5)]
 
     async with db_pool.acquire() as conn:
         for eid in event_ids:
+            payload = {
+                "event_type": "ResourceAllocationRequested",
+                "node_id": str(eid),
+                "target_cpu_cores": 1.0,
+                "target_memory_gb": 1.0,
+                "reason_code": "claim-test",
+            }
+            event_hash = generate_event_hash(None, payload, 1680000000000, 1)
+            await conn.execute(
+                """
+                INSERT INTO events (
+                    event_id, tenant_id, aggregate_id, sequence_id, timestamp_utc_ms,
+                    idempotency_key, actor_id, actor_claims, expected_version, event_type,
+                    payload, previous_hash, event_hash
+                ) VALUES (
+                    $1, $2, $3, 1, 1680000000000, $4, 'worker-test',
+                    $5::jsonb, 0, 'ResourceAllocationRequested', $6::jsonb, NULL, $7
+                )
+                """,
+                eid,
+                tenant_id,
+                eid,
+                f"idem-{eid}",
+                json.dumps([f"allocate:node:{eid}"]),
+                json.dumps(payload),
+                event_hash,
+            )
             await conn.execute(
                 "INSERT INTO outbox (event_id, tenant_id, status) VALUES ($1, $2, 'pending')",
                 eid,
