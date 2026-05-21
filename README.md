@@ -30,3 +30,41 @@ findstr /s /n /i /c:"/api/v1/telemetry/system/backpressure" app\api\routers\*.py
 ```
 
 > Note: in CMD, `findstr` treats `/...` tokens as options unless you wrap the search term with `/c:"..."`.
+
+## Git failure quick-fix ("Git failed with 4 errors")
+Use this sequence when patch/cherry-pick/apply workflows fail and you need a clean recovery to the latest CloudCommander commit.
+
+### 1) Inspect state
+```bash
+git status
+git branch -vv
+git log --oneline -n 10
+```
+
+### 2) Abort partial operations (safe no-op if none active)
+```bash
+git cherry-pick --abort || true
+git rebase --abort || true
+git merge --abort || true
+```
+
+### 3) Remove stale temp patch artifacts
+```bash
+rm -f cloudcommander.patch
+```
+
+### 4) Resync branch to remote/main and verify files
+```bash
+git fetch origin
+git checkout main
+git reset --hard origin/main
+git ls-files | wc -l
+test -f app/main.py && echo "app/main.py present"
+test -f .github/workflows/ci.yml && echo "ci workflow present"
+```
+
+### Error-to-fix map
+- `fatal: bad revision <sha>` -> commit does not exist locally; run `git fetch origin --prune` and re-check `git log --oneline --all`.
+- `error: pathspec '<branch>' did not match` -> local branch missing; create it from remote: `git checkout -b <branch> origin/<branch>`.
+- `patch does not apply` -> wrong base commit; reset to `origin/main` and re-apply changes manually.
+- `working tree has local changes` -> commit or stash before switching: `git add -A && git commit -m "wip"` or `git stash -u`.
