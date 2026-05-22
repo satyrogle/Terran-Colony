@@ -62,8 +62,6 @@ def test_rollback_missing_header_returns_422(client):
         headers={"x-expected-version": "0", "x-tenant-id": str(uuid4()), "x-actor-id": "u1"},
     )
     assert response.status_code == 422
-<<<<<<< ours
-<<<<<<< ours
 
 
 def test_resource_allocation_missing_tenant_header_returns_422(client):
@@ -84,7 +82,3 @@ def test_resource_allocation_missing_tenant_header_returns_422(client):
     )
     assert response.status_code == 422
     assert "x-tenant-id" in response.text.lower()
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs

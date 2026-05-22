@@ -1,26 +1,12 @@
 openapi: 3.0.3
 info:
   title: CloudCommander API
-<<<<<<< ours
-<<<<<<< ours
   version: 1.1.0
   description: Command/query API for CloudCommander deterministic event core.
-=======
-  version: 1.0.0
-  description: |
-    Command/Query API for deterministic CloudCommander core.
->>>>>>> theirs
-=======
-  version: 1.0.0
-  description: |
-    Command/Query API for deterministic CloudCommander core.
->>>>>>> theirs
 servers:
   - url: https://api.cloudcommander.example.com
 security:
   - bearerAuth: []
-<<<<<<< ours
-<<<<<<< ours
 
 paths:
   /api/v1/commands/resource-allocation:
@@ -32,9 +18,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-=======
-=======
->>>>>>> theirs
 paths:
   /api/v1/commands/resource-allocation:
     post:
@@ -53,10 +36,6 @@ paths:
           schema:
             type: integer
             minimum: 0
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
       requestBody:
         required: true
         content:
@@ -70,25 +49,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventResponse'
-<<<<<<< ours
-<<<<<<< ours
         '403':
           description: Actor claim not authorized for target action
-=======
-        '400':
-          description: Validation failure or non-finite numeric input
->>>>>>> theirs
-=======
-        '400':
-          description: Validation failure or non-finite numeric input
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '409':
-<<<<<<< ours
-<<<<<<< ours
           description: Concurrency or idempotency conflict
           content:
             application/json:
@@ -96,32 +63,16 @@ paths:
                 $ref: '#/components/schemas/ErrorMap'
         '422':
           description: Validation or state-transition failure
-=======
-          description: Version conflict
->>>>>>> theirs
-=======
-          description: Version conflict
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
-<<<<<<< ours
-<<<<<<< ours
           description: Aggregate is frozen
-=======
-          description: Aggregate is frozen due to detected external drift
->>>>>>> theirs
-=======
-          description: Aggregate is frozen due to detected external drift
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
 
   /api/v1/commands/dependency-edge:
     post:
@@ -132,9 +83,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-=======
-=======
->>>>>>> theirs
   /api/v1/commands/dependency-edge:
     post:
       summary: Propose dependency edge insertion
@@ -152,10 +100,6 @@ paths:
           schema:
             type: integer
             minimum: 0
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
       requestBody:
         required: true
         content:
@@ -169,61 +113,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventResponse'
-<<<<<<< ours
-<<<<<<< ours
         '403':
           description: Actor claim not authorized for target action
-=======
-        '400':
-          description: Validation failure
->>>>>>> theirs
-=======
-        '400':
-          description: Validation failure
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
         '409':
           description: Concurrency or idempotency conflict
-=======
-        '423':
-          description: Aggregate is frozen due to detected external drift
->>>>>>> theirs
-=======
-        '423':
-          description: Aggregate is frozen due to detected external drift
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
         '422':
           description: Validation or state-transition failure
-=======
-        '409':
-          description: Version conflict
->>>>>>> theirs
-=======
-        '409':
-          description: Version conflict
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
-<<<<<<< ours
-<<<<<<< ours
           description: Aggregate is frozen
-=======
-=======
->>>>>>> theirs
           description: Aggregate is frozen due to detected external drift
           content:
             application/json:
@@ -231,16 +140,10 @@ paths:
                 $ref: '#/components/schemas/ErrorMap'
         '422':
           description: Cycle detected; DAG constraint violated
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
 
   /api/v1/commands/rollback:
     post:
@@ -251,9 +154,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-=======
-=======
->>>>>>> theirs
   /api/v1/commands/rollback:
     post:
       summary: Initiate rollback to sequence or snapshot
@@ -271,10 +171,6 @@ paths:
           schema:
             type: integer
             minimum: 0
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
       requestBody:
         required: true
         content:
@@ -283,21 +179,11 @@ paths:
               $ref: '#/components/schemas/RollbackCommand'
       responses:
         '202':
-<<<<<<< ours
-<<<<<<< ours
           description: Accepted and appended to event log
-=======
-          description: Rollback accepted and queued
->>>>>>> theirs
-=======
-          description: Rollback accepted and queued
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventResponse'
-<<<<<<< ours
-<<<<<<< ours
         '403':
           description: Actor claim not authorized for target action
           content:
@@ -318,20 +204,10 @@ paths:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
           description: Aggregate is frozen
-=======
-        '400':
-          description: Validation failure
->>>>>>> theirs
-=======
-        '400':
-          description: Validation failure
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
 
   /api/v1/projections/service-graph:
     get:
@@ -341,9 +217,6 @@ paths:
       responses:
         '200':
           description: Projected service graph
-=======
-=======
->>>>>>> theirs
   /api/v1/projections/service-graph:
     get:
       summary: Get validated DAG projection
@@ -358,76 +231,41 @@ paths:
       responses:
         '200':
           description: Current service graph projection
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceGraphProjection'
-<<<<<<< ours
-<<<<<<< ours
 
   /api/v1/projections/nodes/{node_id}:
     get:
       summary: Return projected node state
       parameters:
         - $ref: '#/components/parameters/XTenantId'
-=======
-=======
->>>>>>> theirs
   /api/v1/projections/nodes/{node_id}:
     get:
       summary: Get projected node lifecycle state
       security:
         - bearerAuth: []
       parameters:
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
         - in: path
           name: node_id
           required: true
           schema:
             type: string
-<<<<<<< ours
-<<<<<<< ours
             format: uuid
       responses:
         '200':
           description: Node projection
-=======
-      responses:
-        '200':
-          description: Projected node detail
->>>>>>> theirs
-=======
-      responses:
-        '200':
-          description: Projected node detail
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceNodeProjection'
         '404':
-<<<<<<< ours
-<<<<<<< ours
           description: Projection not found
-=======
-          description: Node not found
->>>>>>> theirs
-=======
-          description: Node not found
->>>>>>> theirs
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
-<<<<<<< ours
-<<<<<<< ours
 
   /api/v1/telemetry/system/backpressure:
     get:
@@ -482,18 +320,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/RecentControllerEvent'
 
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-<<<<<<< ours
-<<<<<<< ours
 
   parameters:
     XTenantId:
@@ -631,9 +463,6 @@ components:
           type: string
           format: uuid
         version:
-=======
-=======
->>>>>>> theirs
   schemas:
     CommandEnvelope:
       type: object
@@ -717,29 +546,17 @@ components:
         tenant_id:
           type: string
         last_sequence_id:
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
           type: integer
           minimum: 0
         nodes:
           type: array
           items:
             type: string
-<<<<<<< ours
-<<<<<<< ours
             format: uuid
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
         edges:
           type: array
           items:
             type: object
-<<<<<<< ours
-<<<<<<< ours
             additionalProperties: false
             required:
               - source
@@ -844,9 +661,6 @@ components:
         timestamp_utc_ms:
           type: integer
           minimum: 0
-=======
-=======
->>>>>>> theirs
             required: [source, target]
             properties:
               source:
@@ -865,7 +679,3 @@ components:
         last_sequence_id:
           type: integer
           minimum: 0
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs

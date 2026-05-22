@@ -10,8 +10,6 @@ from app.api.dependencies import get_db_pool, get_tenant_id
 router = APIRouter(prefix="/api/v1/projections", tags=["Projections"])
 
 
-<<<<<<< ours
-<<<<<<< ours
 @router.get("/service-graph")
 async def get_service_graph_projection(
     tenant_id: UUID = Depends(get_tenant_id),
@@ -50,10 +48,6 @@ async def get_service_graph_projection(
     }
 
 
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 @router.get("/nodes/{node_id}")
 async def get_node_projection(
     node_id: UUID,
@@ -61,15 +55,7 @@ async def get_node_projection(
     pool: Any = Depends(get_db_pool),
 ):
     query = """
-<<<<<<< ours
-<<<<<<< ours
         SELECT node_id, lifecycle_state, cpu_cores, memory_gb, last_sequence_id, schema_version
-=======
-        SELECT node_id, lifecycle_state, cpu_cores, memory_gb, last_sequence_id
->>>>>>> theirs
-=======
-        SELECT node_id, lifecycle_state, cpu_cores, memory_gb, last_sequence_id
->>>>>>> theirs
         FROM read_model_nodes
         WHERE tenant_id = $1 AND node_id = $2
     """

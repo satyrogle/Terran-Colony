@@ -18,11 +18,6 @@ spec:
         app: cloudcommander
         component: worker
     spec:
-<<<<<<< ours
-<<<<<<< ours
-=======
-=======
->>>>>>> theirs
       initContainers:
         - name: run-migrations
           image: ghcr.io/example/cloudcommander:staging
@@ -33,23 +28,11 @@ spec:
                 name: cloudcommander-config
             - secretRef:
                 name: cloudcommander-secrets
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
       containers:
         - name: worker
           image: ghcr.io/example/cloudcommander:staging
           imagePullPolicy: IfNotPresent
-<<<<<<< ours
-<<<<<<< ours
           command: ["python", "-m", "app.worker.projection_worker"]
-=======
-          command: ["python", "-m", "app.worker.main"]
->>>>>>> theirs
-=======
-          command: ["python", "-m", "app.worker.main"]
->>>>>>> theirs
           env:
             - name: DATABASE_URL
               valueFrom:

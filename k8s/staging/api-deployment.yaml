@@ -18,11 +18,6 @@ spec:
         app: cloudcommander
         component: api
     spec:
-<<<<<<< ours
-<<<<<<< ours
-=======
-=======
->>>>>>> theirs
       initContainers:
         - name: run-migrations
           image: ghcr.io/example/cloudcommander:staging
@@ -33,10 +28,6 @@ spec:
                 name: cloudcommander-config
             - secretRef:
                 name: cloudcommander-secrets
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
       containers:
         - name: api
           image: ghcr.io/example/cloudcommander:staging
@@ -55,29 +46,13 @@ spec:
               value: staging
           readinessProbe:
             httpGet:
-<<<<<<< ours
-<<<<<<< ours
               path: /docs
-=======
-              path: /api/v1/telemetry/system/backpressure
->>>>>>> theirs
-=======
-              path: /api/v1/telemetry/system/backpressure
->>>>>>> theirs
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-<<<<<<< ours
-<<<<<<< ours
               path: /docs
-=======
-              path: /api/v1/telemetry/system/backpressure
->>>>>>> theirs
-=======
-              path: /api/v1/telemetry/system/backpressure
->>>>>>> theirs
               port: 8080
             initialDelaySeconds: 20
             periodSeconds: 20

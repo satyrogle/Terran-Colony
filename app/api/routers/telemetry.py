@@ -3,15 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-<<<<<<< ours
-<<<<<<< ours
 from fastapi import APIRouter, Depends, Query
-=======
-from fastapi import APIRouter, Depends
->>>>>>> theirs
-=======
-from fastapi import APIRouter, Depends
->>>>>>> theirs
 
 from app.api.dependencies import get_db_pool, get_tenant_id
 from app.api.middleware import backpressure_manager
@@ -56,15 +48,7 @@ async def get_node_guardrail_state(
 
 @router.get("/events/recent")
 async def get_recent_controller_events(
-<<<<<<< ours
-<<<<<<< ours
     limit: int = Query(default=10, ge=1, le=100),
-=======
-    limit: int = 10,
->>>>>>> theirs
-=======
-    limit: int = 10,
->>>>>>> theirs
     tenant_id: UUID = Depends(get_tenant_id),
     pool: Any = Depends(get_db_pool),
 ):
@@ -72,15 +56,7 @@ async def get_recent_controller_events(
         SELECT event_id, event_type, payload, timestamp_utc_ms
         FROM events
         WHERE tenant_id = $1
-<<<<<<< ours
-<<<<<<< ours
           AND event_type IN ('CompensationStrategySelected', 'GuardrailThresholdBreached', 'ExternalDriftResolved')
-=======
-          AND event_type IN ('CompensationStrategySelected', 'GuardrailThresholdBreached', 'ExternalDriftDetected')
->>>>>>> theirs
-=======
-          AND event_type IN ('CompensationStrategySelected', 'GuardrailThresholdBreached', 'ExternalDriftDetected')
->>>>>>> theirs
         ORDER BY sequence_id DESC
         LIMIT $2
     """

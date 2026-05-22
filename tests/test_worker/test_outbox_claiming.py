@@ -1,41 +1,21 @@
 import asyncio
-<<<<<<< ours
-<<<<<<< ours
 import json
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 from uuid import uuid4
 
 import asyncpg
 import pytest
 
-<<<<<<< ours
-<<<<<<< ours
 from app.security.hash_chain import generate_event_hash
 
 
 @pytest.mark.asyncio
 async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool, reset_db):
     _ = reset_db
-=======
-
-@pytest.mark.asyncio
-async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool):
->>>>>>> theirs
-=======
-
-@pytest.mark.asyncio
-async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool):
->>>>>>> theirs
     tenant_id = uuid4()
     event_ids = [uuid4() for _ in range(5)]
 
     async with db_pool.acquire() as conn:
         for eid in event_ids:
-<<<<<<< ours
-<<<<<<< ours
             payload = {
                 "event_type": "ResourceAllocationRequested",
                 "node_id": str(eid),
@@ -63,10 +43,6 @@ async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool):
                 json.dumps(payload),
                 event_hash,
             )
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
             await conn.execute(
                 "INSERT INTO outbox (event_id, tenant_id, status) VALUES ($1, $2, 'pending')",
                 eid,

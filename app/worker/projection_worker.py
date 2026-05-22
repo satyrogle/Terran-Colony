@@ -2,34 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-<<<<<<< ours
-<<<<<<< ours
 import os
-=======
-from typing import Optional
->>>>>>> theirs
-=======
-from typing import Optional
->>>>>>> theirs
 from uuid import UUID
 
 import asyncpg
 
 from app.api.middleware import backpressure_manager
 from app.control.pid_guardrail import PIDGuardrailController
-<<<<<<< ours
-<<<<<<< ours
 from app.domain.reducers import reduce_node
 from app.domain.schemas import EventEnvelope, ResourceAllocationRequested
 from app.infrastructure.adapters.mock_aws import MockAWSAdapter
 from app.infrastructure.repository import DataCorruptionError, EventRepository
 from app.worker.reconciler import ReconcilerLoop
-=======
-from app.domain.schemas import ResourceAllocationRequested
->>>>>>> theirs
-=======
-from app.domain.schemas import ResourceAllocationRequested
->>>>>>> theirs
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +26,6 @@ pid_controller = PIDGuardrailController(kp=0.5, ki=0.1, kd=0.2, setpoint=0.8)
 class OutboxWorker:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
-<<<<<<< ours
-<<<<<<< ours
         self.repository = EventRepository(pool)
         self.reconciler = ReconcilerLoop(MockAWSAdapter())
 
@@ -53,17 +35,6 @@ class OutboxWorker:
 
         logger.info("Starting outbox worker loop")
         while not stop_event.is_set():
-=======
-=======
->>>>>>> theirs
-
-    async def run(self) -> None:
-        logger.info("Starting outbox worker loop")
-        while True:
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
             try:
                 processed_any = await self.process_next_batch()
                 if not processed_any:
@@ -71,13 +42,7 @@ class OutboxWorker:
             except Exception as exc:  # safeguard loop
                 logger.exception("Worker loop error: %s", exc)
                 await asyncio.sleep(POLL_INTERVAL_SEC)
-<<<<<<< ours
-<<<<<<< ours
         logger.info("Outbox worker loop stopped.")
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 
     async def process_next_batch(self, batch_size: int = 10) -> bool:
         claim_query = """
@@ -106,8 +71,6 @@ class OutboxWorker:
             async with conn.transaction():
                 rows = await conn.fetch(claim_query, batch_size)
 
-<<<<<<< ours
-<<<<<<< ours
         if not rows:
             return False
 
@@ -147,9 +110,7 @@ class OutboxWorker:
                 async with conn.transaction():
                     await self._mark_failed(conn, event_id, attempts, str(exc))
 
-    async def _compute_next_projection_state(
-        self, conn: asyncpg.Connection, event: EventEnvelope
-    ):
+    async def _compute_next_projection_state(self, conn: asyncpg.Connection, event: EventEnvelope):
         current_state = await self.repository.get_node_projection(
             conn, event.tenant_id, event.aggregate_id
         )
@@ -195,50 +156,6 @@ class OutboxWorker:
         event_id: UUID,
         attempts: int,
         error_msg: str,
-=======
-=======
->>>>>>> theirs
-            if not rows:
-                return False
-
-            for row in rows:
-                await self._process_record(conn, row)
-
-        return True
-
-    async def _process_record(self, conn: asyncpg.Connection, row: asyncpg.Record) -> None:
-        event_id: UUID = row["event_id"]
-        attempts: int = row["attempts"]
-
-        try:
-            # TODO: fetch event, project idempotently, dispatch reconciler as needed
-            # Observe-only PID hook: only runs when payload is ResourceAllocationRequested
-            event = None
-            if event is not None and isinstance(event.payload, ResourceAllocationRequested):
-                max_limit_cores = 16.0
-                current_utilization = event.payload.target_cpu_cores / max_limit_cores
-                pid_controller.observe_resource_change(
-                    current_utilization=current_utilization,
-                    aggregate_id=str(event.aggregate_id),
-                )
-            await self._mark_processed(conn, event_id)
-            await backpressure_manager.record_completion()
-        except Exception as exc:
-            logger.error("Failed processing event %s: %s", event_id, exc)
-            await self._handle_failure(conn, event_id, attempts, str(exc))
-
-    async def _mark_processed(self, conn: asyncpg.Connection, event_id: UUID) -> None:
-        await conn.execute(
-            "UPDATE outbox SET status = 'processed', processed_at = NOW() WHERE event_id = $1",
-            event_id,
-        )
-
-    async def _handle_failure(
-        self, conn: asyncpg.Connection, event_id: UUID, attempts: int, error_msg: str
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
     ) -> None:
         status = "dead_letter" if attempts >= MAX_ATTEMPTS else "failed"
         if status == "dead_letter":
@@ -255,8 +172,6 @@ class OutboxWorker:
             error_msg,
             event_id,
         )
-<<<<<<< ours
-<<<<<<< ours
 
 
 async def create_pool_from_env() -> asyncpg.Pool:
@@ -286,7 +201,3 @@ async def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
