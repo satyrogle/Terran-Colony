@@ -68,3 +68,15 @@ test -f .github/workflows/ci.yml && echo "ci workflow present"
 - `error: pathspec '<branch>' did not match` -> local branch missing; create it from remote: `git checkout -b <branch> origin/<branch>`.
 - `patch does not apply` -> wrong base commit; reset to `origin/main` and re-apply changes manually.
 - `working tree has local changes` -> commit or stash before switching: `git add -A && git commit -m "wip"` or `git stash -u`.
+
+## Practical workflow for locked-down laptops (CI-first)
+When endpoint security does not allow local dependency installs, use this workflow:
+
+1. Create a feature branch.
+2. Make changes locally.
+3. Push immediately.
+4. Review CI output for pass/fail.
+5. Iterate from CI failures.
+6. Merge only on green checks.
+
+This repository already supports this mode via GitHub Actions and the reproducible bootstrap in `scripts/ci.sh`.
