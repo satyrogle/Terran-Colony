@@ -27,15 +27,39 @@ WHERE sequence_id = 1;
 
 -- Ensure previous_hash references a known event_hash in the same stream
 -- (enforces chain linkage for sequence_id > 1)
-CREATE UNIQUE INDEX IF NOT EXISTS uq_events_stream_event_hash
-ON events(tenant_id, aggregate_id, event_hash)
-WHERE event_hash IS NOT NULL;
+-- NOTE: Foreign keys cannot reference a partial unique index target.
+-- We need a real UNIQUE constraint (or PK) on the referenced columns.
+DROP INDEX IF EXISTS uq_events_stream_event_hash;
 
-ALTER TABLE events
-ADD CONSTRAINT fk_events_previous_hash
-FOREIGN KEY (tenant_id, aggregate_id, previous_hash)
-REFERENCES events(tenant_id, aggregate_id, event_hash)
-DEFERRABLE INITIALLY DEFERRED;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'uq_events_stream_event_hash'
+      AND conrelid = 'events'::regclass
+  ) THEN
+    ALTER TABLE events
+    ADD CONSTRAINT uq_events_stream_event_hash
+    UNIQUE (tenant_id, aggregate_id, event_hash);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'fk_events_previous_hash'
+      AND conrelid = 'events'::regclass
+  ) THEN
+    ALTER TABLE events
+    ADD CONSTRAINT fk_events_previous_hash
+    FOREIGN KEY (tenant_id, aggregate_id, previous_hash)
+    REFERENCES events(tenant_id, aggregate_id, event_hash)
+    DEFERRABLE INITIALLY DEFERRED;
+  END IF;
+END $$;
 
 -- Helpful index for replay verification and audit scans
 CREATE INDEX IF NOT EXISTS idx_events_stream_sequence_hash
