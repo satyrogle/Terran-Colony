@@ -39,7 +39,24 @@ class EventRepository:
         """
         return await conn.fetchval(query, tenant_id, aggregate_id)
 
-    async def append_event_and_enqueue(self, envelope: EventEnvelope) -> None:
+    async def get_stream_head(
+        self, conn: asyncpg.Connection, tenant_id: UUID, aggregate_id: UUID
+    ) -> tuple[int, Optional[str]]:
+        query = """
+            SELECT sequence_id, event_hash
+            FROM events
+            WHERE tenant_id = $1 AND aggregate_id = $2
+            ORDER BY sequence_id DESC
+            LIMIT 1
+        """
+        record = await conn.fetchrow(query, tenant_id, aggregate_id)
+        if record is None:
+            return 0, None
+        return int(record["sequence_id"]), record["event_hash"]
+
+    async def _append_event_and_enqueue_with_conn(
+        self, conn: asyncpg.Connection, envelope: EventEnvelope
+    ) -> None:
         append_query = """
             INSERT INTO events (
                 event_id, tenant_id, aggregate_id, sequence_id,
@@ -55,38 +72,47 @@ class EventRepository:
         """
 
         payload_dict = envelope.payload.model_dump(mode="json")
+        previous_hash = await self._get_latest_hash(
+            conn, envelope.tenant_id, envelope.aggregate_id
+        )
+        event_hash = generate_event_hash(
+            previous_hash=previous_hash,
+            payload=payload_dict,
+            timestamp_ms=envelope.timestamp_utc_ms,
+            sequence_id=envelope.sequence_id,
+            tenant_id=envelope.tenant_id,
+            aggregate_id=envelope.aggregate_id,
+        )
 
+        await conn.execute(
+            append_query,
+            envelope.event_id,
+            envelope.tenant_id,
+            envelope.aggregate_id,
+            envelope.sequence_id,
+            envelope.timestamp_utc_ms,
+            envelope.idempotency_key,
+            envelope.actor_id,
+            envelope.actor_claims,
+            envelope.expected_version,
+            envelope.payload.event_type,
+            payload_dict,
+            previous_hash,
+            event_hash,
+        )
+
+        await conn.execute(outbox_query, envelope.event_id, envelope.tenant_id)
+
+    async def append_event_and_enqueue_in_transaction(
+        self, conn: asyncpg.Connection, envelope: EventEnvelope
+    ) -> None:
+        await self._append_event_and_enqueue_with_conn(conn, envelope)
+
+    async def append_event_and_enqueue(self, envelope: EventEnvelope) -> None:
         try:
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
-                    previous_hash = await self._get_latest_hash(
-                        conn, envelope.tenant_id, envelope.aggregate_id
-                    )
-                    event_hash = generate_event_hash(
-                        previous_hash=previous_hash,
-                        payload=payload_dict,
-                        timestamp_ms=envelope.timestamp_utc_ms,
-                        sequence_id=envelope.sequence_id,
-                    )
-
-                    await conn.execute(
-                        append_query,
-                        envelope.event_id,
-                        envelope.tenant_id,
-                        envelope.aggregate_id,
-                        envelope.sequence_id,
-                        envelope.timestamp_utc_ms,
-                        envelope.idempotency_key,
-                        envelope.actor_id,
-                        envelope.actor_claims,
-                        envelope.expected_version,
-                        envelope.payload.event_type,
-                        payload_dict,
-                        previous_hash,
-                        event_hash,
-                    )
-
-                    await conn.execute(outbox_query, envelope.event_id, envelope.tenant_id)
+                    await self._append_event_and_enqueue_with_conn(conn, envelope)
 
         except UniqueViolationError as e:
             constraint_name = e.constraint_name
@@ -122,6 +148,8 @@ class EventRepository:
                 payload=payload_dict,
                 timestamp_ms=record["timestamp_utc_ms"],
                 sequence_id=record["sequence_id"],
+                tenant_id=record["tenant_id"],
+                aggregate_id=record["aggregate_id"],
             )
 
         return [self._map_record_to_envelope(record) for record in records]
@@ -147,6 +175,8 @@ class EventRepository:
             payload=record["payload"],
             timestamp_ms=record["timestamp_utc_ms"],
             sequence_id=record["sequence_id"],
+            tenant_id=record["tenant_id"],
+            aggregate_id=record["aggregate_id"],
         )
 
         return self._map_record_to_envelope(record)

@@ -6,6 +6,7 @@ import asyncpg
 import pytest
 
 from app.security.hash_chain import generate_event_hash
+from app.worker.projection_worker import OutboxWorker
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -23,7 +24,14 @@ async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool, rese
                 "target_memory_gb": 1.0,
                 "reason_code": "claim-test",
             }
-            event_hash = generate_event_hash(None, payload, 1680000000000, 1)
+            event_hash = generate_event_hash(
+                None,
+                payload,
+                1680000000000,
+                1,
+                tenant_id=tenant_id,
+                aggregate_id=eid,
+            )
             await conn.execute(
                 """
                 INSERT INTO events (
@@ -79,3 +87,66 @@ async def test_skip_locked_prevents_duplicate_claims(db_pool: asyncpg.Pool, rese
     assert len(worker_1_claims) == 3
     assert len(worker_2_claims) == 2
     assert set(worker_1_claims).isdisjoint(set(worker_2_claims))
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_stale_processing_claim_is_recovered(db_pool: asyncpg.Pool, reset_db):
+    _ = reset_db
+    tenant_id = uuid4()
+    event_id = uuid4()
+    payload = {
+        "event_type": "ResourceAllocationRequested",
+        "node_id": str(event_id),
+        "target_cpu_cores": 1.0,
+        "target_memory_gb": 1.0,
+        "reason_code": "reclaim-processing-lease",
+    }
+    event_hash = generate_event_hash(
+        None,
+        payload,
+        1680000000000,
+        1,
+        tenant_id=tenant_id,
+        aggregate_id=event_id,
+    )
+
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO events (
+                event_id, tenant_id, aggregate_id, sequence_id, timestamp_utc_ms,
+                idempotency_key, actor_id, actor_claims, expected_version, event_type,
+                payload, previous_hash, event_hash
+            ) VALUES (
+                $1, $2, $3, 1, 1680000000000, $4, 'worker-test',
+                $5::jsonb, 0, 'ResourceAllocationRequested', $6::jsonb, NULL, $7
+            )
+            """,
+            event_id,
+            tenant_id,
+            event_id,
+            f"idem-{event_id}",
+            json.dumps([f"allocate:node:{event_id}"]),
+            json.dumps(payload),
+            event_hash,
+        )
+        await conn.execute(
+            """
+            INSERT INTO outbox (event_id, tenant_id, status, attempts, last_attempt_at)
+            VALUES ($1, $2, 'processing', 2, NOW() - INTERVAL '10 minutes')
+            """,
+            event_id,
+            tenant_id,
+        )
+
+    worker = OutboxWorker(db_pool)
+    claimed: list = []
+
+    async def _capture(row):
+        claimed.append(row["event_id"])
+
+    worker._process_record = _capture
+
+    processed = await worker.process_next_batch(batch_size=1)
+    assert processed is True
+    assert claimed == [event_id]

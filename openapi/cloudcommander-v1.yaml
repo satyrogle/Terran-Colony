@@ -18,24 +18,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-paths:
-  /api/v1/commands/resource-allocation:
-    post:
-      summary: Request resource allocation mutation
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: header
-          name: X-Idempotency-Key
-          required: true
-          schema:
-            type: string
-        - in: header
-          name: X-Expected-Version
-          required: true
-          schema:
-            type: integer
-            minimum: 0
       requestBody:
         required: true
         content:
@@ -83,23 +65,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-  /api/v1/commands/dependency-edge:
-    post:
-      summary: Propose dependency edge insertion
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: header
-          name: X-Idempotency-Key
-          required: true
-          schema:
-            type: string
-        - in: header
-          name: X-Expected-Version
-          required: true
-          schema:
-            type: integer
-            minimum: 0
       requestBody:
         required: true
         content:
@@ -133,13 +98,6 @@ paths:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
           description: Aggregate is frozen
-          description: Aggregate is frozen due to detected external drift
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMap'
-        '422':
-          description: Cycle detected; DAG constraint violated
           content:
             application/json:
               schema:
@@ -154,23 +112,6 @@ paths:
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
-  /api/v1/commands/rollback:
-    post:
-      summary: Initiate rollback to sequence or snapshot
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: header
-          name: X-Idempotency-Key
-          required: true
-          schema:
-            type: string
-        - in: header
-          name: X-Expected-Version
-          required: true
-          schema:
-            type: integer
-            minimum: 0
       requestBody:
         required: true
         content:
@@ -217,20 +158,6 @@ paths:
       responses:
         '200':
           description: Projected service graph
-  /api/v1/projections/service-graph:
-    get:
-      summary: Get validated DAG projection
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: tenant_id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Current service graph projection
           content:
             application/json:
               schema:
@@ -241,12 +168,6 @@ paths:
       summary: Return projected node state
       parameters:
         - $ref: '#/components/parameters/XTenantId'
-  /api/v1/projections/nodes/{node_id}:
-    get:
-      summary: Get projected node lifecycle state
-      security:
-        - bearerAuth: []
-      parameters:
         - in: path
           name: node_id
           required: true
@@ -463,89 +384,6 @@ components:
           type: string
           format: uuid
         version:
-  schemas:
-    CommandEnvelope:
-      type: object
-      required: [tenant_id, actor_id, idempotency_key, expected_version]
-      properties:
-        tenant_id:
-          type: string
-        actor_id:
-          type: string
-    ResourceAllocationCommand:
-      allOf:
-        - $ref: '#/components/schemas/CommandEnvelope'
-        - type: object
-          required: [node_id, target_cpu_cores, target_memory_gb, reason_code]
-          properties:
-            node_id:
-              type: string
-            target_cpu_cores:
-              type: number
-              minimum: 0.1
-              maximum: 128.0
-            target_memory_gb:
-              type: number
-              minimum: 0.5
-              maximum: 1024.0
-            reason_code:
-              type: string
-    DependencyEdgeCommand:
-      allOf:
-        - $ref: '#/components/schemas/CommandEnvelope'
-        - type: object
-          required: [source_node_id, target_node_id]
-          properties:
-            source_node_id:
-              type: string
-            target_node_id:
-              type: string
-            edge_constraints:
-              type: object
-              additionalProperties: true
-    RollbackCommand:
-      allOf:
-        - $ref: '#/components/schemas/CommandEnvelope'
-        - type: object
-          properties:
-            target_sequence_id:
-              type: integer
-              minimum: 0
-            target_aggregate_id:
-              type: string
-            reason_code:
-              type: string
-          required: [target_aggregate_id, target_sequence_id, reason_code]
-    EventResponse:
-      type: object
-      required: [event_id, status]
-      properties:
-        event_id:
-          type: string
-        status:
-          type: string
-          enum: [accepted, pending, applied, failed]
-        sequence_id:
-          type: integer
-          minimum: 0
-    ErrorMap:
-      type: object
-      required: [code, message]
-      properties:
-        code:
-          type: string
-          enum: [validation_error, conflict_error, dag_cycle_error, routing_error, not_found, aggregate_frozen]
-        message:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
-    ServiceGraphProjection:
-      type: object
-      properties:
-        tenant_id:
-          type: string
-        last_sequence_id:
           type: integer
           minimum: 0
         nodes:
@@ -659,23 +497,5 @@ components:
           type: object
           additionalProperties: true
         timestamp_utc_ms:
-          type: integer
-          minimum: 0
-            required: [source, target]
-            properties:
-              source:
-                type: string
-              target:
-                type: string
-    ResourceNodeProjection:
-      type: object
-      required: [node_id, lifecycle_state]
-      properties:
-        node_id:
-          type: string
-        lifecycle_state:
-          type: string
-          enum: [active, orphaned, tombstoned, frozen]
-        last_sequence_id:
           type: integer
           minimum: 0

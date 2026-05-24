@@ -11,7 +11,7 @@ from app.worker.projection_worker import OutboxWorker
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_projection_and_outbox_status_are_atomic(db_pool, reset_db):
+async def test_projection_and_outbox_status_are_atomic(db_pool, reset_db, monkeypatch):
     _ = reset_db
     tenant_id = uuid4()
     node_id = uuid4()
@@ -24,7 +24,14 @@ async def test_projection_and_outbox_status_are_atomic(db_pool, reset_db):
         "reason_code": "scale-up",
     }
     timestamp_utc_ms = 1680000000000
-    event_hash = generate_event_hash(None, payload, timestamp_utc_ms, 1)
+    event_hash = generate_event_hash(
+        None,
+        payload,
+        timestamp_utc_ms,
+        1,
+        tenant_id=tenant_id,
+        aggregate_id=node_id,
+    )
 
     async with db_pool.acquire() as conn:
         await conn.execute(
@@ -61,6 +68,16 @@ async def test_projection_and_outbox_status_are_atomic(db_pool, reset_db):
 
     worker._evaluate_reconcile = _mock_evaluate_reconcile
     worker._mark_processed = _boom_mark_processed
+    completion_counter = {"count": 0}
+
+    async def _record_completion():
+        completion_counter["count"] += 1
+
+    monkeypatch.setattr(
+        projection_worker.backpressure_manager,
+        "record_completion",
+        _record_completion,
+    )
 
     processed = await worker.process_next_batch(batch_size=1)
     assert processed is True
@@ -84,6 +101,79 @@ async def test_projection_and_outbox_status_are_atomic(db_pool, reset_db):
     assert node_count == 0
     assert outbox_status == "failed"
     assert guardrail_count == 0
+    assert completion_counter["count"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_reconcile_error_does_not_advance_projection(db_pool, reset_db):
+    _ = reset_db
+    tenant_id = uuid4()
+    node_id = uuid4()
+    event_id = uuid4()
+    payload = {
+        "event_type": "ResourceAllocationRequested",
+        "node_id": str(node_id),
+        "target_cpu_cores": 3.0,
+        "target_memory_gb": 6.0,
+        "reason_code": "transient-failure",
+    }
+    timestamp_utc_ms = 1680000000100
+    event_hash = generate_event_hash(
+        None,
+        payload,
+        timestamp_utc_ms,
+        1,
+        tenant_id=tenant_id,
+        aggregate_id=node_id,
+    )
+
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO events (
+                event_id, tenant_id, aggregate_id, sequence_id, timestamp_utc_ms,
+                idempotency_key, actor_id, actor_claims, expected_version, event_type,
+                payload, previous_hash, event_hash
+            ) VALUES ($1, $2, $3, 1, $4, 'idem-fail', 'operator-1', $5::jsonb, 0, 'ResourceAllocationRequested', $6::jsonb, NULL, $7)
+            """,
+            event_id,
+            tenant_id,
+            node_id,
+            timestamp_utc_ms,
+            json.dumps([f"allocate:node:{node_id}"]),
+            json.dumps(payload),
+            event_hash,
+        )
+        await conn.execute(
+            "INSERT INTO outbox (event_id, tenant_id, status) VALUES ($1, $2, 'pending')",
+            event_id,
+            tenant_id,
+        )
+
+    worker = OutboxWorker(db_pool)
+
+    async def _mock_evaluate_reconcile(event):
+        _ = event
+        return "retry_scheduled", "Transient adapter failure: timeout"
+
+    worker._evaluate_reconcile = _mock_evaluate_reconcile
+
+    processed = await worker.process_next_batch(batch_size=1)
+    assert processed is True
+
+    async with db_pool.acquire() as conn:
+        node_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM read_model_nodes WHERE tenant_id = $1 AND node_id = $2",
+            tenant_id,
+            node_id,
+        )
+        outbox_status = await conn.fetchval(
+            "SELECT status FROM outbox WHERE event_id = $1",
+            event_id,
+        )
+
+    assert node_count == 0
+    assert outbox_status == "failed"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -101,8 +191,22 @@ async def test_replayed_event_is_idempotent_for_projection(db_pool, reset_db):
         "reason_code": "replay-check",
     }
     timestamp_utc_ms = 1680000000001
-    genesis_hash = generate_event_hash(None, payload, timestamp_utc_ms, 1)
-    event_hash = generate_event_hash(genesis_hash, payload, timestamp_utc_ms, 2)
+    genesis_hash = generate_event_hash(
+        None,
+        payload,
+        timestamp_utc_ms,
+        1,
+        tenant_id=tenant_id,
+        aggregate_id=node_id,
+    )
+    event_hash = generate_event_hash(
+        genesis_hash,
+        payload,
+        timestamp_utc_ms,
+        2,
+        tenant_id=tenant_id,
+        aggregate_id=node_id,
+    )
 
     async with db_pool.acquire() as conn:
         await conn.execute(
@@ -199,7 +303,14 @@ async def test_fuzzy_guardrail_state_is_persisted(db_pool, reset_db, monkeypatch
         "reason_code": "guardrail-wire",
     }
     timestamp_utc_ms = 1680000000002
-    event_hash = generate_event_hash(None, payload, timestamp_utc_ms, 1)
+    event_hash = generate_event_hash(
+        None,
+        payload,
+        timestamp_utc_ms,
+        1,
+        tenant_id=tenant_id,
+        aggregate_id=node_id,
+    )
 
     async with db_pool.acquire() as conn:
         await conn.execute(

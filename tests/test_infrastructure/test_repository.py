@@ -116,13 +116,15 @@ async def test_append_writes_hash_fields_and_enqueues_outbox(monkeypatch):
 
     captured_hash_args = {}
 
-    def _fake_hash(*, previous_hash, payload, timestamp_ms, sequence_id):
+    def _fake_hash(*, previous_hash, payload, timestamp_ms, sequence_id, tenant_id, aggregate_id):
         captured_hash_args.update(
             {
                 "previous_hash": previous_hash,
                 "payload": payload,
                 "timestamp_ms": timestamp_ms,
                 "sequence_id": sequence_id,
+                "tenant_id": tenant_id,
+                "aggregate_id": aggregate_id,
             }
         )
         return "b" * 64
@@ -134,6 +136,8 @@ async def test_append_writes_hash_fields_and_enqueues_outbox(monkeypatch):
 
     assert captured_hash_args["previous_hash"] == "a" * 64
     assert captured_hash_args["sequence_id"] == 2
+    assert captured_hash_args["tenant_id"] == envelope.tenant_id
+    assert captured_hash_args["aggregate_id"] == envelope.aggregate_id
 
     assert len(conn.executed) == 2
     append_query, append_args = conn.executed[0]

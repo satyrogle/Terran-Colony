@@ -37,15 +37,17 @@ class PIDGuardrailController:
         self.ki = ki
         self.kd = kd
         self.setpoint = setpoint
-        self.previous_error = 0.0
-        self.integral = 0.0
-        self.last_time = time.time()
+        self._state_by_aggregate: dict[str, dict[str, float]] = {}
         self._instability_sets = {
             "stable": TriangleFuzzySet(0.0, 0.0, 0.35),
             "drifting": TriangleFuzzySet(0.2, 0.55, 0.95),
             "volatile": TriangleFuzzySet(0.75, 1.3, 2.5),
         }
-        self._latest_state = {
+        self._latest_state = self._stable_state()
+        self._latest_state_by_aggregate: dict[str, dict] = {}
+
+    def _stable_state(self) -> dict:
+        return {
             "label": "stable",
             "degree": 1.0,
             "membership": {"stable": 1.0, "drifting": 0.0, "volatile": 0.0},
@@ -54,20 +56,29 @@ class PIDGuardrailController:
 
     def observe_resource_change(self, current_utilization: float, aggregate_id: str) -> float:
         current_time = time.time()
-        dt = current_time - self.last_time
+        state = self._state_by_aggregate.setdefault(
+            aggregate_id,
+            {
+                "previous_error": 0.0,
+                "integral": 0.0,
+                "last_time": current_time,
+            },
+        )
+        dt = current_time - state["last_time"]
         if dt <= 0:
             dt = 1e-4
 
         error = self.setpoint - current_utilization
-        self.integral += error * dt
-        derivative = (error - self.previous_error) / dt
+        state["integral"] += error * dt
+        derivative = (error - state["previous_error"]) / dt
 
-        u_t = (self.kp * error) + (self.ki * self.integral) + (self.kd * derivative)
+        u_t = (self.kp * error) + (self.ki * state["integral"]) + (self.kd * derivative)
         fuzzy_state = self.classify_instability(u_t)
+        self._latest_state_by_aggregate[aggregate_id] = fuzzy_state
         self._latest_state = fuzzy_state
 
-        self.previous_error = error
-        self.last_time = current_time
+        state["previous_error"] = error
+        state["last_time"] = current_time
 
         logger.info(
             "[PID Observe] Aggregate: %s | u(t): %.4f | Error: %.4f | State: %s(%.2f)",
@@ -98,5 +109,7 @@ class PIDGuardrailController:
             "control_signal_abs": control_abs,
         }
 
-    def get_latest_state(self) -> dict:
-        return dict(self._latest_state)
+    def get_latest_state(self, aggregate_id: str | None = None) -> dict:
+        if aggregate_id is None:
+            return dict(self._latest_state)
+        return dict(self._latest_state_by_aggregate.get(aggregate_id, self._stable_state()))

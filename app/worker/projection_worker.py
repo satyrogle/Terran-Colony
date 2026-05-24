@@ -5,14 +5,20 @@ import logging
 import os
 import signal
 import time
-from uuid import UUID
+from typing import Optional
+from uuid import UUID, uuid4
 
 import asyncpg
 
 from app.api.middleware import backpressure_manager
 from app.control.pid_guardrail import PIDGuardrailController
 from app.domain.reducers import reduce_node
-from app.domain.schemas import EventEnvelope, ResourceAllocationRequested
+from app.domain.schemas import (
+    CompensationStrategySelected,
+    EventEnvelope,
+    ResourceAllocationRequested,
+    RollbackInitiated,
+)
 from app.infrastructure.adapters.mock_aws import MockAWSAdapter
 from app.infrastructure.repository import DataCorruptionError, EventRepository
 from app.worker.reconciler import ReconcilerLoop
@@ -21,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 POLL_INTERVAL_SEC = 1.0
+RETRY_BACKOFF_BASE_SECONDS = 15
+PROCESSING_LEASE_TIMEOUT_SECONDS = 300
 MAX_CPU_CORES_FOR_GUARDRAIL = 16.0
 
 GUARDRAIL_SEVERITY_BY_LABEL = {
@@ -79,11 +87,22 @@ class OutboxWorker:
             WITH claimed AS (
                 SELECT event_id, tenant_id
                 FROM outbox
-                WHERE status IN ('pending', 'failed')
-                  AND (
-                    last_attempt_at IS NULL
-                    OR last_attempt_at < NOW() - (POWER(2, attempts) * INTERVAL '1 second')
-                  )
+                WHERE (
+                    (
+                        status IN ('pending', 'failed')
+                        AND (
+                            last_attempt_at IS NULL
+                            OR last_attempt_at < NOW() - (POWER(2, attempts) * $2::interval)
+                        )
+                    )
+                    OR (
+                        status = 'processing'
+                        AND (
+                            last_attempt_at IS NULL
+                            OR last_attempt_at < NOW() - $3::interval
+                        )
+                    )
+                )
                 ORDER BY created_at ASC
                 LIMIT $1
                 FOR UPDATE SKIP LOCKED
@@ -99,7 +118,12 @@ class OutboxWorker:
 
         async with self.pool.acquire() as conn:
             async with conn.transaction():
-                rows = await conn.fetch(claim_query, batch_size)
+                rows = await conn.fetch(
+                    claim_query,
+                    batch_size,
+                    f"{RETRY_BACKOFF_BASE_SECONDS} seconds",
+                    f"{PROCESSING_LEASE_TIMEOUT_SECONDS} seconds",
+                )
 
         if not rows:
             return False
@@ -123,13 +147,19 @@ class OutboxWorker:
 
                 guardrail_state = self._observe_guardrail_state(event)
                 reconcile_status, reconcile_error = await self._evaluate_reconcile(event)
-                next_state = await self._compute_next_projection_state(conn, event)
+                compensation_strategy = self._extract_compensation_strategy(reconcile_status)
+                should_apply_projection = self._should_apply_projection(
+                    reconcile_status, reconcile_error
+                )
+                next_state = None
+                if should_apply_projection:
+                    next_state = await self._compute_next_projection_state(conn, event)
 
                 async with conn.transaction():
                     if next_state is not None:
                         await self.repository.upsert_node_projection(conn, tenant_id, next_state)
 
-                    if guardrail_state is not None:
+                    if guardrail_state is not None and should_apply_projection:
                         await self.repository.insert_guardrail_alert(
                             conn=conn,
                             tenant_id=tenant_id,
@@ -141,16 +171,28 @@ class OutboxWorker:
                         )
 
                     if reconcile_error is None:
+                        if compensation_strategy is not None:
+                            await self._emit_compensation_followups(
+                                conn=conn,
+                                source_event=event,
+                                strategy_id=compensation_strategy,
+                            )
                         await self._mark_processed(conn, event_id, reconcile_status)
                     else:
                         await self._mark_failed(conn, event_id, attempts, reconcile_error)
 
-            await backpressure_manager.record_completion()
         except Exception as exc:
             logger.error("Failed processing event %s: %s", event_id, exc)
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
                     await self._mark_failed(conn, event_id, attempts, str(exc))
+        finally:
+            try:
+                await backpressure_manager.record_completion()
+            except Exception:
+                logger.exception(
+                    "Failed to record backpressure completion for event %s", event_id
+                )
 
     async def _compute_next_projection_state(self, conn: asyncpg.Connection, event: EventEnvelope):
         current_state = await self.repository.get_node_projection(
@@ -163,7 +205,7 @@ class OutboxWorker:
             current_utilization = event.payload.target_cpu_cores / MAX_CPU_CORES_FOR_GUARDRAIL
             control_signal = pid_controller.observe_resource_change(
                 current_utilization=current_utilization,
-                aggregate_id=str(event.aggregate_id),
+                aggregate_id=f"{event.tenant_id}:{event.aggregate_id}",
             )
             fuzzy_state = pid_controller.classify_instability(control_signal)
             label = fuzzy_state["label"]
@@ -206,6 +248,69 @@ class OutboxWorker:
             except Exception as exc:
                 return "retry_scheduled", str(exc)
         return "not_applicable", None
+
+    def _extract_compensation_strategy(self, reconcile_status: str) -> Optional[str]:
+        prefix = "compensating_via_"
+        if not reconcile_status.startswith(prefix):
+            return None
+        strategy = reconcile_status[len(prefix) :].strip()
+        return strategy or None
+
+    def _should_apply_projection(
+        self, reconcile_status: str, reconcile_error: str | None
+    ) -> bool:
+        if reconcile_error is not None:
+            return False
+        return reconcile_status in {"completed", "not_applicable"}
+
+    async def _emit_compensation_followups(
+        self,
+        conn: asyncpg.Connection,
+        source_event: EventEnvelope,
+        strategy_id: str,
+    ) -> None:
+        head_sequence, _ = await self.repository.get_stream_head(
+            conn, source_event.tenant_id, source_event.aggregate_id
+        )
+        base_sequence = max(head_sequence, source_event.sequence_id)
+        now_ms = int(time.time() * 1000)
+
+        compensation_event = EventEnvelope(
+            event_id=uuid4(),
+            tenant_id=source_event.tenant_id,
+            aggregate_id=source_event.aggregate_id,
+            sequence_id=base_sequence + 1,
+            timestamp_utc_ms=now_ms,
+            idempotency_key=f"compensation-{source_event.event_id}",
+            actor_id="worker-compensator",
+            actor_claims=[],
+            expected_version=base_sequence,
+            payload=CompensationStrategySelected(
+                intent_id=str(source_event.event_id),
+                aggregate_id=source_event.aggregate_id,
+                selected_strategy=strategy_id,
+                utility_scores={"selected_strategy_weight": 1.0},
+            ),
+        )
+        await self.repository.append_event_and_enqueue_in_transaction(conn, compensation_event)
+
+        rollback_event = EventEnvelope(
+            event_id=uuid4(),
+            tenant_id=source_event.tenant_id,
+            aggregate_id=source_event.aggregate_id,
+            sequence_id=base_sequence + 2,
+            timestamp_utc_ms=now_ms + 1,
+            idempotency_key=f"rollback-{source_event.event_id}",
+            actor_id="worker-compensator",
+            actor_claims=[],
+            expected_version=base_sequence + 1,
+            payload=RollbackInitiated(
+                target_node_id=source_event.aggregate_id,
+                target_sequence_id=max(0, source_event.sequence_id - 1),
+                reason_code=f"auto-compensation:{strategy_id}",
+            ),
+        )
+        await self.repository.append_event_and_enqueue_in_transaction(conn, rollback_event)
 
     async def _mark_processed(
         self, conn: asyncpg.Connection, event_id: UUID, reconcile_status: str
