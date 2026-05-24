@@ -263,7 +263,12 @@ async def test_fuzzy_guardrail_state_is_persisted(db_pool, reset_db, monkeypatch
             tenant_id,
             node_id,
         )
+        outbox_status = await conn.fetchval(
+            "SELECT status FROM outbox WHERE event_id = $1",
+            event_id,
+        )
 
+    assert outbox_status == "processed"
     assert row is not None
     assert row["severity"] == "warning"
     assert row["metric_value"] == pytest.approx(0.77)
