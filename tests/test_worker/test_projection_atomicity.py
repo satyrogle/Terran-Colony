@@ -91,6 +91,7 @@ async def test_replayed_event_is_idempotent_for_projection(db_pool, reset_db):
     _ = reset_db
     tenant_id = uuid4()
     node_id = uuid4()
+    genesis_event_id = uuid4()
     event_id = uuid4()
     payload = {
         "event_type": "ResourceAllocationRequested",
@@ -100,10 +101,26 @@ async def test_replayed_event_is_idempotent_for_projection(db_pool, reset_db):
         "reason_code": "replay-check",
     }
     timestamp_utc_ms = 1680000000001
-    previous_hash = generate_event_hash(None, payload, timestamp_utc_ms, 1)
-    event_hash = generate_event_hash(previous_hash, payload, timestamp_utc_ms, 2)
+    genesis_hash = generate_event_hash(None, payload, timestamp_utc_ms, 1)
+    event_hash = generate_event_hash(genesis_hash, payload, timestamp_utc_ms, 2)
 
     async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO events (
+                event_id, tenant_id, aggregate_id, sequence_id, timestamp_utc_ms,
+                idempotency_key, actor_id, actor_claims, expected_version, event_type,
+                payload, previous_hash, event_hash
+            ) VALUES ($1, $2, $3, 1, $4, 'idem-replay-genesis', 'operator-1', $5::jsonb, 0, 'ResourceAllocationRequested', $6::jsonb, NULL, $7)
+            """,
+            genesis_event_id,
+            tenant_id,
+            node_id,
+            timestamp_utc_ms,
+            json.dumps([f"allocate:node:{node_id}"]),
+            json.dumps(payload),
+            genesis_hash,
+        )
         await conn.execute(
             """
             INSERT INTO events (
@@ -118,7 +135,7 @@ async def test_replayed_event_is_idempotent_for_projection(db_pool, reset_db):
             timestamp_utc_ms,
             json.dumps([f"allocate:node:{node_id}"]),
             json.dumps(payload),
-            previous_hash,
+            genesis_hash,
             event_hash,
         )
         await conn.execute(
