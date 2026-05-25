@@ -20,7 +20,7 @@ spec:
     spec:
       initContainers:
         - name: run-migrations
-          image: jakeyy8/cloudcommander-worker:staging
+          image: jakeyy8/cloudcommander-worker:34174f2
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "migrations.run"]
           envFrom:
@@ -30,7 +30,7 @@ spec:
                 name: cloudcommander-config
       containers:
         - name: worker
-          image: jakeyy8/cloudcommander-worker:staging
+          image: jakeyy8/cloudcommander-worker:34174f2
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "app.worker.projection_worker"]
           envFrom:
@@ -60,3 +60,4 @@ spec:
         - name: mtls-certs
           secret:
             secretName: cloudcommander-worker-mtls
+            optional: true

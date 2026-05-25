@@ -20,7 +20,7 @@ spec:
     spec:
       initContainers:
         - name: run-migrations
-          image: jakeyy8/cloudcommander-api:staging
+          image: jakeyy8/cloudcommander-api:34174f2
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "migrations.run"]
           envFrom:
@@ -30,7 +30,7 @@ spec:
                 name: cloudcommander-config
       containers:
         - name: api
-          image: jakeyy8/cloudcommander-api:staging
+          image: jakeyy8/cloudcommander-api:34174f2
           imagePullPolicy: IfNotPresent
           command: ["uvicorn"]
           args: ["app.main:app", "--host", "0.0.0.0", "--port", "8080"]
