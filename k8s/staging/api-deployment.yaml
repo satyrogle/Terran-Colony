@@ -20,30 +20,27 @@ spec:
     spec:
       initContainers:
         - name: run-migrations
-          image: ghcr.io/example/cloudcommander:staging
+          image: jakeyy8/cloudcommander-api:staging
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "migrations.run"]
           envFrom:
-            - configMapRef:
-                name: cloudcommander-config
             - secretRef:
                 name: cloudcommander-secrets
+            - configMapRef:
+                name: cloudcommander-config
       containers:
         - name: api
-          image: ghcr.io/example/cloudcommander:staging
+          image: jakeyy8/cloudcommander-api:staging
           imagePullPolicy: IfNotPresent
           command: ["uvicorn"]
           args: ["app.main:app", "--host", "0.0.0.0", "--port", "8080"]
           ports:
             - containerPort: 8080
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: cloudcommander-secrets
-                  key: DATABASE_URL
-            - name: ENVIRONMENT
-              value: staging
+          envFrom:
+            - secretRef:
+                name: cloudcommander-secrets
+            - configMapRef:
+                name: cloudcommander-config
           readinessProbe:
             httpGet:
               path: /docs

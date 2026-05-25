@@ -10,7 +10,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/example/cloudcommander:staging
+          image: jakeyy8/cloudcommander-api:staging
           command: ["python", "-m", "migrations.run"]
           env:
             - name: DATABASE_URL
