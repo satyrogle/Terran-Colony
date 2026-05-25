@@ -15,6 +15,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/XTenantId'
         - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/XRole'
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
@@ -37,6 +38,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
+        '401':
+          description: Invalid authentication or role claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMap'
         '409':
           description: Concurrency or idempotency conflict
           content:
@@ -50,7 +57,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
-          description: Aggregate is frozen
+          description: Aggregate is frozen or locked by active compensation
           content:
             application/json:
               schema:
@@ -62,6 +69,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/XTenantId'
         - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/XRole'
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
@@ -84,6 +92,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
+        '401':
+          description: Invalid authentication or role claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMap'
         '409':
           description: Concurrency or idempotency conflict
           content:
@@ -97,7 +111,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
-          description: Aggregate is frozen
+          description: Aggregate is frozen or locked by active compensation
           content:
             application/json:
               schema:
@@ -109,6 +123,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/XTenantId'
         - $ref: '#/components/parameters/XActorId'
+        - $ref: '#/components/parameters/XRole'
         - $ref: '#/components/parameters/XActorClaims'
         - $ref: '#/components/parameters/XIdempotencyKey'
         - $ref: '#/components/parameters/XExpectedVersion'
@@ -131,6 +146,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
+        '401':
+          description: Invalid authentication or role claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMap'
         '409':
           description: Concurrency or idempotency conflict
           content:
@@ -144,7 +165,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorMap'
         '423':
-          description: Aggregate is frozen
+          description: Aggregate is frozen or locked by active compensation
           content:
             application/json:
               schema:
@@ -295,6 +316,16 @@ components:
       required: false
       schema:
         type: string
+    XRole:
+      in: header
+      name: X-Role
+      required: false
+      schema:
+        type: string
+        enum:
+          - user
+          - system
+        default: user
     XIdempotencyKey:
       in: header
       name: X-Idempotency-Key

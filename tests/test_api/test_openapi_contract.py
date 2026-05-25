@@ -28,6 +28,7 @@ def test_command_paths_require_expected_ingress_headers():
     expected_refs = [
         "$ref: '#/components/parameters/XTenantId'",
         "$ref: '#/components/parameters/XActorId'",
+        "$ref: '#/components/parameters/XRole'",
         "$ref: '#/components/parameters/XActorClaims'",
         "$ref: '#/components/parameters/XIdempotencyKey'",
         "$ref: '#/components/parameters/XExpectedVersion'",
@@ -79,6 +80,15 @@ def test_actor_claims_header_is_optional_string():
     actor_claims_block = _block(spec, "    XActorClaims:", "    XIdempotencyKey:")
     assert "required: false" in actor_claims_block
     assert "type: string" in actor_claims_block
+
+
+def test_role_header_is_optional_user_or_system_claim():
+    spec = _read_spec()
+    role_block = _block(spec, "    XRole:", "    XIdempotencyKey:")
+    assert "required: false" in role_block
+    assert "default: user" in role_block
+    assert "- user" in role_block
+    assert "- system" in role_block
 
 
 def test_graph_centrality_route_and_schema_are_in_openapi_contract():

@@ -10,6 +10,7 @@ from app.api.dependencies import (
     get_actor_id,
     get_current_user_claims,
     get_repository,
+    get_subject_context,
     get_tenant_id,
 )
 from app.domain.reducers import InvalidStateTransitionError, reduce_node
@@ -27,6 +28,7 @@ from app.infrastructure.repository import (
     EventRepository,
     IdempotencyKeyInUseError,
 )
+from app.security.abac import ResourceContext, SubjectContext, evaluate_policy
 from app.security.rbac_policy import UnauthorizedStateTransitionError
 
 router = APIRouter(prefix="/api/v1/commands", tags=["Commands"])
@@ -72,7 +74,23 @@ async def validate_and_append(
     repository: EventRepository,
     envelope: EventEnvelope,
     tenant_id: UUID,
+    subject: SubjectContext,
 ) -> None:
+    reconcile_status = await repository.get_active_reconcile_status(
+        tenant_id, envelope.aggregate_id
+    )
+    decision = evaluate_policy(
+        subject,
+        "mutate",
+        ResourceContext(
+            aggregate_id=str(envelope.aggregate_id),
+            tenant_id=str(tenant_id),
+            reconcile_status=reconcile_status,
+        ),
+    )
+    if not decision.allowed:
+        raise HTTPException(status_code=decision.status_code, detail=decision.reason)
+
     events = await repository.get_events(tenant_id, envelope.aggregate_id)
     current_state = None
     for evt in events:
@@ -102,6 +120,7 @@ async def request_resource_allocation(
     x_idempotency_key: str = Header(..., min_length=1, max_length=100),
     x_expected_version: int = Header(..., ge=0),
     tenant_id: UUID = Depends(get_tenant_id),
+    subject: SubjectContext = Depends(get_subject_context),
     actor_id: str = Depends(get_actor_id),
     actor_claims: List[str] = Depends(get_current_user_claims),
     repository: EventRepository = Depends(get_repository),
@@ -126,7 +145,7 @@ async def request_resource_allocation(
         payload=event_payload,
     )
 
-    await validate_and_append(repository, envelope, tenant_id)
+    await validate_and_append(repository, envelope, tenant_id, subject)
     return {"status": "accepted", "event_id": str(envelope.event_id)}
 
 
@@ -136,6 +155,7 @@ async def propose_dependency_edge(
     x_idempotency_key: str = Header(..., min_length=1, max_length=100),
     x_expected_version: int = Header(..., ge=0),
     tenant_id: UUID = Depends(get_tenant_id),
+    subject: SubjectContext = Depends(get_subject_context),
     actor_id: str = Depends(get_actor_id),
     actor_claims: List[str] = Depends(get_current_user_claims),
     repository: EventRepository = Depends(get_repository),
@@ -158,7 +178,7 @@ async def propose_dependency_edge(
         payload=event_payload,
     )
 
-    await validate_and_append(repository, envelope, tenant_id)
+    await validate_and_append(repository, envelope, tenant_id, subject)
     return {"status": "accepted", "event_id": str(envelope.event_id)}
 
 
@@ -168,6 +188,7 @@ async def initiate_rollback(
     x_idempotency_key: str = Header(..., min_length=1, max_length=100),
     x_expected_version: int = Header(..., ge=0),
     tenant_id: UUID = Depends(get_tenant_id),
+    subject: SubjectContext = Depends(get_subject_context),
     actor_id: str = Depends(get_actor_id),
     actor_claims: List[str] = Depends(get_current_user_claims),
     repository: EventRepository = Depends(get_repository),
@@ -191,5 +212,5 @@ async def initiate_rollback(
         payload=event_payload,
     )
 
-    await validate_and_append(repository, envelope, tenant_id)
+    await validate_and_append(repository, envelope, tenant_id, subject)
     return {"status": "accepted", "event_id": str(envelope.event_id)}

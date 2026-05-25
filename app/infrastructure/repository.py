@@ -204,6 +204,50 @@ class EventRepository:
             return None
         return ResourceNodeSnapshot.model_validate(dict(record))
 
+    async def get_active_reconcile_status(
+        self, tenant_id: UUID, aggregate_id: UUID
+    ) -> str:
+        query = """
+            SELECT e.event_type, e.payload, o.status, o.error_payload
+            FROM events e
+            JOIN outbox o
+              ON o.event_id = e.event_id
+             AND o.tenant_id = e.tenant_id
+            WHERE e.tenant_id = $1
+              AND e.aggregate_id = $2
+              AND (
+                    o.error_payload->>'reconcile_status' LIKE 'compensating_via_%'
+                    OR e.event_type IN ('CompensationStrategySelected', 'RollbackInitiated')
+                  )
+            ORDER BY e.sequence_id DESC
+        """
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(query, tenant_id, aggregate_id)
+
+        for record in records:
+            status = record["status"]
+            payload = self._normalize_json(record["payload"])
+            error_payload = self._normalize_json(record["error_payload"] or {})
+
+            if (
+                record["event_type"] in {"CompensationStrategySelected", "RollbackInitiated"}
+                and status in {"pending", "processing", "failed"}
+            ):
+                if record["event_type"] == "CompensationStrategySelected":
+                    strategy = payload.get("selected_strategy", "active_saga")
+                    return f"compensating_via_{strategy}"
+                return "compensating_via_rollback"
+
+            reconcile_status = error_payload.get("reconcile_status")
+            if (
+                isinstance(reconcile_status, str)
+                and reconcile_status.startswith("compensating_via_")
+                and status in {"pending", "processing", "failed"}
+            ):
+                return reconcile_status
+
+        return "not_applicable"
+
     async def upsert_node_projection(
         self,
         conn: asyncpg.Connection,
